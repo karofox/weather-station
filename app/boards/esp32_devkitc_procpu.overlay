@@ -3,25 +3,41 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <zephyr/dt-bindings/mipi_dbi/mipi_dbi.h>
+
+/ {
+	mipi_dbi_ssd1327 {
+		compatible = "zephyr,mipi-dbi-spi";
+		spi-dev = <&spi3>;
+
+		#address-cells = <1>;
+        #size-cells = <0>;
+
+		dc-gpios = <&gpio0 17 GPIO_ACTIVE_HIGH>;
+        reset-gpios = <&gpio0 16 GPIO_ACTIVE_LOW>;
+
+		oled: ssd1327@0 {
+            compatible = "solomon,ssd1327";
+            reg = <0>;
+            mipi-max-frequency = <10000000>;
+            
+            width = <128>;
+            height = <96>;
+            display-offset = <0>;
+            multiplex-ratio = <95>;
+			prechargep = <0x5>;
+			oscillator-freq = <0x0>;
+			start-line = <0>;
+			remap-value = <0x53>;
+			phase-length = <0x1f>;
+			mipi-mode = "MIPI_DBI_MODE_SPI_4WIRE";
+        };
+	};
+};
+
 &spi3 {
 	status = "okay";
 	cs-gpios = <&gpio0 5 GPIO_ACTIVE_LOW>;
-
-	oled: ssd1327@0 {
-		compatible = "solomon,ssd1327fb";
-		reg = <0>;
-		spi-max-frequency = <10000000>;
-
-		reset-gpios = <&gpio0 16 GPIO_ACTIVE_LOW>;
-		data-cmd-gpios = <&gpio0 17 GPIO_ACTIVE_HIGH>;
-
-		width = <128>;
-		height = <96>;
-		segment-offset = <0>;
-		page-offset = <0>;
-		display-offset = <0>;
-		multiplex-ratio = <95>;
-	};
 };
 
 &i2c0 {

@@ -23,7 +23,6 @@ SENSOR_DT_READ_IODEV(iodev, DT_COMPAT_GET_ANY_STATUS_OKAY(bosch_bme280),
 
 RTIO_DEFINE(ctx, 1, 1);
 
-
 static const struct device *check_bme280_device(void)
 {
 	if (sensor == NULL) {
@@ -43,11 +42,36 @@ static const struct device *check_bme280_device(void)
 	return sensor;
 }
 
+const struct device *const display = DEVICE_DT_GET(DT_NODELABEL(oled));
+
+static const struct device *check_oled_device(void)
+{
+	if (!device_is_ready(display)) {
+		printk("\nError: Device \"%s\" is not ready; "
+		       "check the driver initialization logs for errors.\n",
+		       display->name);
+		return NULL;
+	}
+
+	printk("Found device \"%s\", getting display\n", display->name);
+	return display;
+}
+
 int main(void)
 {
 	const struct device *sensor = check_bme280_device();
+	const struct device *display = check_oled_device();
 
 	if (sensor == NULL) {
+		return 0;
+	}
+
+	if (display == NULL) {
+		return 0;
+	}
+
+	if (cfb_framebuffer_init(display)) {
+		printk("Framebuffer initialization failed!\n");
 		return 0;
 	}
 
@@ -95,6 +119,10 @@ int main(void)
 			PRIq_arg(temp_data.readings[0].temperature, 6, temp_data.shift),
 			PRIq_arg(press_data.readings[0].pressure, 6, press_data.shift),
 			PRIq_arg(hum_data.readings[0].humidity, 6, hum_data.shift));
+
+		cfb_framebuffer_clear(display, false);
+		cfb_print(display, "temp: " + temp_data.readings[0].temperature, 0, 0);
+		cfb_framebuffer_finalize(display);
 
 		k_sleep(K_MSEC(1000));
 	}
