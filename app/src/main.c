@@ -8,16 +8,13 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
+#include <zephyr/display/cfb.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/sensor_data_types.h>
 #include <zephyr/rtio/rtio.h>
 #include <zephyr/dsp/print_format.h>
 
-/*
- * Get a device structure from a devicetree node with compatible
- * "bosch,bme280". (If there are multiple, just pick one.)
- */
-const struct device *const dev = DEVICE_DT_GET_ANY(bosch_bme280);
+const struct device *const sensor = DEVICE_DT_GET_ANY(bosch_bme280);
 
 SENSOR_DT_READ_IODEV(iodev, DT_COMPAT_GET_ANY_STATUS_OKAY(bosch_bme280),
 		{SENSOR_CHAN_AMBIENT_TEMP, 0},
@@ -26,30 +23,31 @@ SENSOR_DT_READ_IODEV(iodev, DT_COMPAT_GET_ANY_STATUS_OKAY(bosch_bme280),
 
 RTIO_DEFINE(ctx, 1, 1);
 
+
 static const struct device *check_bme280_device(void)
 {
-	if (dev == NULL) {
+	if (sensor == NULL) {
 		/* No such node, or the node does not have status "okay". */
 		printk("\nError: no device found.\n");
 		return NULL;
 	}
 
-	if (!device_is_ready(dev)) {
+	if (!device_is_ready(sensor)) {
 		printk("\nError: Device \"%s\" is not ready; "
 		       "check the driver initialization logs for errors.\n",
-		       dev->name);
+		       sensor->name);
 		return NULL;
 	}
 
-	printk("Found device \"%s\", getting sensor data\n", dev->name);
-	return dev;
+	printk("Found device \"%s\", getting sensor data\n", sensor->name);
+	return sensor;
 }
 
 int main(void)
 {
-	const struct device *dev = check_bme280_device();
+	const struct device *sensor = check_bme280_device();
 
-	if (dev == NULL) {
+	if (sensor == NULL) {
 		return 0;
 	}
 
@@ -59,16 +57,16 @@ int main(void)
 		int rc = sensor_read(&iodev, &ctx, buf, 128);
 
 		if (rc != 0) {
-			printk("%s: sensor_read() failed: %d\n", dev->name, rc);
+			printk("%s: sensor_read() failed: %d\n", sensor->name, rc);
 			return rc;
 		}
 
 		const struct sensor_decoder_api *decoder;
 
-		rc = sensor_get_decoder(dev, &decoder);
+		rc = sensor_get_decoder(sensor, &decoder);
 
 		if (rc != 0) {
-			printk("%s: sensor_get_decode() failed: %d\n", dev->name, rc);
+			printk("%s: sensor_get_decode() failed: %d\n", sensor->name, rc);
 			return rc;
 		}
 

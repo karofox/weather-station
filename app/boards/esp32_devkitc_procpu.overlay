@@ -3,6 +3,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+&spi3 {
+	status = "okay";
+	cs-gpios = <&gpio0 5 GPIO_ACTIVE_LOW>;
+
+	oled: ssd1327@0 {
+		compatible = "solomon,ssd1327fb";
+		reg = <0>;
+		spi-max-frequency = <10000000>;
+
+		reset-gpios = <&gpio0 16 GPIO_ACTIVE_LOW>;
+		data-cmd-gpios = <&gpio0 17 GPIO_ACTIVE_HIGH>;
+
+		width = <128>;
+		height = <96>;
+		segment-offset = <0>;
+		page-offset = <0>;
+		display-offset = <0>;
+		multiplex-ratio = <95>;
+	};
+};
+
 &i2c0 {
 	status = "okay";
 
