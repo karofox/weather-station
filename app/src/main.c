@@ -1,80 +1,104 @@
 /*
+ * Copyright (c) 2012-2014 Wind River Systems, Inc.
  * Copyright (c) 2021 Nordic Semiconductor ASA
+ *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/drivers/sensor.h>
-#include <zephyr/logging/log.h>
+#include <zephyr/drivers/sensor_data_types.h>
+#include <zephyr/rtio/rtio.h>
+#include <zephyr/dsp/print_format.h>
 
-#include <app/drivers/blink.h>
+/*
+ * Get a device structure from a devicetree node with compatible
+ * "bosch,bme280". (If there are multiple, just pick one.)
+ */
+const struct device *const dev = DEVICE_DT_GET_ANY(bosch_bme280);
 
-#include <zephyr/app_version.h>
+SENSOR_DT_READ_IODEV(iodev, DT_COMPAT_GET_ANY_STATUS_OKAY(bosch_bme280),
+		{SENSOR_CHAN_AMBIENT_TEMP, 0},
+		{SENSOR_CHAN_HUMIDITY, 0},
+		{SENSOR_CHAN_PRESS, 0});
 
-LOG_MODULE_REGISTER(main, CONFIG_APP_LOG_LEVEL);
+RTIO_DEFINE(ctx, 1, 1);
 
-#define BLINK_PERIOD_MS_STEP 100U
-#define BLINK_PERIOD_MS_MAX  1000U
+static const struct device *check_bme280_device(void)
+{
+	if (dev == NULL) {
+		/* No such node, or the node does not have status "okay". */
+		printk("\nError: no device found.\n");
+		return NULL;
+	}
+
+	if (!device_is_ready(dev)) {
+		printk("\nError: Device \"%s\" is not ready; "
+		       "check the driver initialization logs for errors.\n",
+		       dev->name);
+		return NULL;
+	}
+
+	printk("Found device \"%s\", getting sensor data\n", dev->name);
+	return dev;
+}
 
 int main(void)
 {
-	int ret;
-	unsigned int period_ms = BLINK_PERIOD_MS_MAX;
-	const struct device *sensor, *blink;
-	struct sensor_value last_val = { 0 }, val;
+	const struct device *dev = check_bme280_device();
 
-	printk("Zephyr Example Application %s\n", APP_VERSION_STRING);
-
-	sensor = DEVICE_DT_GET(DT_NODELABEL(example_sensor));
-	if (!device_is_ready(sensor)) {
-		LOG_ERR("Sensor not ready");
+	if (dev == NULL) {
 		return 0;
 	}
-
-	blink = DEVICE_DT_GET(DT_NODELABEL(blink_led));
-	if (!device_is_ready(blink)) {
-		LOG_ERR("Blink LED not ready");
-		return 0;
-	}
-
-	ret = blink_off(blink);
-	if (ret < 0) {
-		LOG_ERR("Could not turn off LED (%d)", ret);
-		return 0;
-	}
-
-	printk("Use the sensor to change LED blinking period\n");
 
 	while (1) {
-		ret = sensor_sample_fetch(sensor);
-		if (ret < 0) {
-			LOG_ERR("Could not fetch sample (%d)", ret);
-			return 0;
+		uint8_t buf[128];
+
+		int rc = sensor_read(&iodev, &ctx, buf, 128);
+
+		if (rc != 0) {
+			printk("%s: sensor_read() failed: %d\n", dev->name, rc);
+			return rc;
 		}
 
-		ret = sensor_channel_get(sensor, SENSOR_CHAN_PROX, &val);
-		if (ret < 0) {
-			LOG_ERR("Could not get sample (%d)", ret);
-			return 0;
+		const struct sensor_decoder_api *decoder;
+
+		rc = sensor_get_decoder(dev, &decoder);
+
+		if (rc != 0) {
+			printk("%s: sensor_get_decode() failed: %d\n", dev->name, rc);
+			return rc;
 		}
 
-		if ((last_val.val1 == 0) && (val.val1 == 1)) {
-			if (period_ms == 0U) {
-				period_ms = BLINK_PERIOD_MS_MAX;
-			} else {
-				period_ms -= BLINK_PERIOD_MS_STEP;
-			}
+		uint32_t temp_fit = 0;
+		struct sensor_q31_data temp_data = {0};
 
-			printk("Proximity detected, setting LED period to %u ms\n",
-			       period_ms);
-			blink_set_period_ms(blink, period_ms);
-		}
+		decoder->decode(buf,
+			(struct sensor_chan_spec) {SENSOR_CHAN_AMBIENT_TEMP, 0},
+			&temp_fit, 1, &temp_data);
 
-		last_val = val;
+		uint32_t press_fit = 0;
+		struct sensor_q31_data press_data = {0};
 
-		k_sleep(K_MSEC(100));
+		decoder->decode(buf,
+				(struct sensor_chan_spec) {SENSOR_CHAN_PRESS, 0},
+				&press_fit, 1, &press_data);
+
+		uint32_t hum_fit = 0;
+		struct sensor_q31_data hum_data = {0};
+
+		decoder->decode(buf,
+				(struct sensor_chan_spec) {SENSOR_CHAN_HUMIDITY, 0},
+				&hum_fit, 1, &hum_data);
+
+		printk("temp: %s%d.%d; press: %s%d.%d; humidity: %s%d.%d\n",
+			PRIq_arg(temp_data.readings[0].temperature, 6, temp_data.shift),
+			PRIq_arg(press_data.readings[0].pressure, 6, press_data.shift),
+			PRIq_arg(hum_data.readings[0].humidity, 6, hum_data.shift));
+
+		k_sleep(K_MSEC(1000));
 	}
-
 	return 0;
 }
-
